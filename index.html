@@ -57,6 +57,7 @@
     <nav class="tabs">
       <button class="tab active" data-tab="estudiar">📚 Estudiar</button>
       <button class="tab" data-tab="progreso">📈 Progreso</button>
+      <button class="tab" data-tab="material">📎 Material</button>
       <button class="tab" data-tab="logros">🏆 Logros</button>
       <button class="tab" data-tab="ajustes">⚙️</button>
     </nav>
@@ -108,6 +109,33 @@
       </div>
     </div>
 
+    <!-- Tab Material -->
+    <div class="tab-content" id="tab-material">
+      <div class="card">
+        <h3>📎 Material del colegio</h3>
+        <p class="muted">El material que subas tiene PRIORIDAD sobre el currículo MINEDUC. El tutor enseñará primero estos contenidos.</p>
+
+        <label>Materia</label>
+        <select id="mat-subject" class="select"></select>
+
+        <label>Título del material</label>
+        <input id="mat-title" type="text" placeholder="ej: Sistema Digestivo - Unidad 3" />
+
+        <label>Contenido</label>
+        <textarea id="mat-text" rows="6" placeholder="Pega aquí el resumen, planificación o apuntes del colegio..."></textarea>
+
+        <label>O sube un PDF (se extraerá el texto)</label>
+        <input id="mat-pdf" type="file" accept="application/pdf" />
+        <div id="mat-pdf-status" class="muted" style="margin-top:4px;"></div>
+
+        <button class="btn-primary" id="btn-add-material">+ Agregar material</button>
+
+        <hr />
+        <h4 style="margin-bottom:10px;">Materiales cargados</h4>
+        <div id="materials-list"></div>
+      </div>
+    </div>
+
     <!-- Tab Logros -->
     <div class="tab-content" id="tab-logros">
       <div class="card">
@@ -136,7 +164,10 @@
   <div id="toast" class="toast"></div>
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.min.js"></script>
+<script>if (window.pdfjsLib) { window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.worker.min.js'; }</script>
 <script src="js/curriculum.js"></script>
+<script src="js/school-materials.js"></script>
 <script src="js/gamification.js"></script>
 <script src="js/ui.js"></script>
 <script src="js/tutor.js"></script>

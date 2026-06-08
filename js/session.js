@@ -3,6 +3,28 @@ window.Session = {
   state: null,
   timerId: null,
 
+  // Resuelve qué se va a enseñar: material del cole (prioridad) o MINEDUC (respaldo)
+  resolveTarget(subjectKey) {
+    const st = window.App.state;
+    const school = window.SchoolProgression.nextActive(subjectKey, st);
+    if (school && !school.allMastered) {
+      return {
+        kind: 'school',
+        material: school.material,
+        section: school.section,
+        sectionIdx: school.idx,
+        aciertos: (school.mp && school.mp.aciertos) || 0
+      };
+    }
+    const { level, oa } = window.Progression.currentOA(subjectKey, st.progress);
+    return {
+      kind: 'mineduc',
+      level,
+      oa,
+      aciertos: st.progress[subjectKey].aciertos_consecutivos
+    };
+  },
+
   start(subjectKey) {
     const st = window.App.state;
     if (!st.apiKey) {
@@ -10,30 +32,27 @@ window.Session = {
       window.UI.switchTab('ajustes');
       return;
     }
-    const { level, oa } = window.Progression.currentOA(subjectKey, st.progress);
+    const target = this.resolveTarget(subjectKey);
 
     this.state = {
       subjectKey,
-      level,
-      oa,
+      target,
       totalSec: this.BLOCK_MIN * 60,
       remaining: this.BLOCK_MIN * 60,
       blockIdx: 0,
       blocks: 1,
       history: [],
       startedAt: Date.now(),
-      messages: 0,
-      lastWasHint: false
+      messages: 0
     };
 
     window.UI.showSession();
-    window.UI.setSessionInfo(subjectKey, oa);
+    window.UI.setSessionInfoFromTarget(subjectKey, target);
     window.UI.renderBlocks(this.state.blocks, this.state.blockIdx);
     window.UI.clearChat();
     window.UI.setTimer(this.state.remaining, this.state.totalSec);
     this.startTimer();
 
-    // Saludo inicial del tutor
     this.sendToTutor('__inicio_bloque__', true);
   },
 
@@ -89,17 +108,15 @@ window.Session = {
     const st = window.App.state;
     const typing = window.UI.addTyping();
 
-    const { level, oa } = window.Progression.currentOA(this.state.subjectKey, st.progress);
-    this.state.level = level;
-    this.state.oa = oa;
-    window.UI.setSessionInfo(this.state.subjectKey, oa);
+    // re-resolver objetivo cada turno (puede haber avanzado de sección/OA)
+    const target = this.resolveTarget(this.state.subjectKey);
+    this.state.target = target;
+    window.UI.setSessionInfoFromTarget(this.state.subjectKey, target);
 
-    const systemPrompt = window.Tutor.buildSystemPrompt({
-      materia: window.CURRICULUM[this.state.subjectKey].name,
-      oa,
-      nivel: level.n,
-      estilo: st.learning_style || 'práctico',
-      aciertos: st.progress[this.state.subjectKey].aciertos_consecutivos
+    const systemPrompt = window.Tutor.buildSystemPromptForTarget({
+      subjectKey: this.state.subjectKey,
+      target,
+      estilo: st.learning_style || 'practico'
     });
 
     const historyForApi = isInitial
@@ -121,23 +138,35 @@ window.Session = {
         this.state.history.push({ role: 'assistant', content: clean });
       }
 
-      // Procesar flags
       if (flags.hit) {
         window.App.addXP(window.Gamification.XP.HIT, '¡Acierto! +15 XP');
         if (flags.auto) {
           window.App.addXP(window.Gamification.XP.SELF_DISCOVERY, 'Llegaste sola 🌟 +10 XP');
         }
-        const result = window.Progression.registerHit(this.state.subjectKey, st.progress);
-        if (result.advancedOA) {
-          window.App.addXP(window.Gamification.XP.OA_DOMINATED, 'OA dominado +30 XP 🎯');
-          st.oas_dominated = (st.oas_dominated || 0) + 1;
-          if (result.advancedLevel) {
-            st.level_completed = true;
-            window.UI.toast('¡Subiste de nivel curricular! 🏔️', 3200);
+        if (target.kind === 'school') {
+          const r = window.SchoolProgression.registerHit(st, this.state.subjectKey, target.material.id, target.section.id);
+          if (r.sectionMastered) {
+            window.App.addXP(window.Gamification.XP.OA_DOMINATED, 'Sección dominada +30 XP 🎯');
+            st.oas_dominated = (st.oas_dominated || 0) + 1;
+            window.UI.toast('¡Dominaste esta sección del cole! 🌟', 2800);
+          }
+        } else {
+          const r = window.Progression.registerHit(this.state.subjectKey, st.progress);
+          if (r.advancedOA) {
+            window.App.addXP(window.Gamification.XP.OA_DOMINATED, 'OA dominado +30 XP 🎯');
+            st.oas_dominated = (st.oas_dominated || 0) + 1;
+            if (r.advancedLevel) {
+              st.level_completed = true;
+              window.UI.toast('¡Subiste de nivel curricular! 🏔️', 3200);
+            }
           }
         }
       } else if (flags.miss) {
-        window.Progression.registerMiss(this.state.subjectKey, st.progress);
+        if (target.kind === 'school') {
+          window.SchoolProgression.registerMiss(st, this.state.subjectKey, target.material.id, target.section.id);
+        } else {
+          window.Progression.registerMiss(this.state.subjectKey, st.progress);
+        }
       }
 
       window.App.checkAchievementsAndPersist();
